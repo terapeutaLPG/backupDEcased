@@ -1,0 +1,9 @@
+.gradle/
+build/
+run/
+.idea/
+*.iml
+out/
+mcmodsrepo/
+.jdk17/
+jdk17.zip
