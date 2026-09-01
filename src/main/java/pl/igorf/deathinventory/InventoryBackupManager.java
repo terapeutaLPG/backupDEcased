@@ -7,6 +7,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -203,8 +204,19 @@ public class InventoryBackupManager {
             inventory.selected = snapshot.getInt("SelectedSlot");
         }
 
+        syncEquippedItems(player);
+
         player.containerMenu.broadcastChanges();
         player.inventoryMenu.broadcastChanges();
+    }
+
+    private void syncEquippedItems(ServerPlayer player) {
+        Inventory inventory = player.getInventory();
+        player.setItemSlot(EquipmentSlot.FEET, inventory.armor.get(0).copy());
+        player.setItemSlot(EquipmentSlot.LEGS, inventory.armor.get(1).copy());
+        player.setItemSlot(EquipmentSlot.CHEST, inventory.armor.get(2).copy());
+        player.setItemSlot(EquipmentSlot.HEAD, inventory.armor.get(3).copy());
+        player.setItemSlot(EquipmentSlot.OFFHAND, inventory.offhand.get(0).copy());
     }
 
     private CompoundTag createSnapshot(ServerPlayer player, DamageSource damageSource, long timestamp) {
