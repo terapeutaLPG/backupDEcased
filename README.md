@@ -1,13 +1,24 @@
 # Death Inventory Backup
 
-Mod Forge dla Minecraft 1.20.1 (DeceasedCraft 5.10.16).
+Mod zapisujacy ekwipunek i XP gracza przy smierci. Autor: **jaruso99**
+
+## Dwie wersje (rozne loadery!)
+
+| Paczka | Minecraft | Loader | Plik JAR |
+|--------|-----------|--------|----------|
+| **DeceasedCraft** | 1.20.1 | Forge | `build/libs/deathinventorybackup-1.2.0.jar` |
+| **All The Mods 10** | 1.21.1 | NeoForge | `neoforge/build/libs/deathinventorybackup-neoforge-1.2.0.jar` |
+
+**Nie mieszaj wersji** - ATM10 wymaga NeoForge 1.21.1, DeceasedCraft wymaga Forge 1.20.1.
 
 ## Funkcje
 
-- Automatyczny zapis ekwipunku przy smierci gracza
-- Zapis asynchroniczny na dysk (bez lagow na glownym watku serwera)
-- Maksymalnie 20 ostatnich backupow na gracza (starsze sa usuwane)
-- Komendy tylko dla operatorow (poziom OP 2)
+- Automatyczny zapis ekwipunku i XP przy smierci
+- Zapis asynchroniczny na dysk
+- Maksymalnie 20 backupow na gracza
+- Komendy tylko dla operatorow (OP 2)
+- GUI podgladu ekwipunku
+- Powiadomienie po smierci z numerem backupu i ID
 
 ## Komendy
 
@@ -19,19 +30,17 @@ Mod Forge dla Minecraft 1.20.1 (DeceasedCraft 5.10.16).
 /invbackup delete <gracz> <nr>
 ```
 
-Numer backupu (#1, #2...) podpowiada sie przez TAB. Na liscie sa klikalne przyciski [Podglad], [Przywroc], [Usun].
-GUI pokazuje ekwipunek z backupu tylko do podgladu - nie mozna wyciagac itemow. Przywracanie przez przycisk w GUI.
+## Budowanie
 
-## Instalacja
+DeceasedCraft (Forge 1.20.1):
+```
+gradlew build
+```
 
-1. Zbuduj mod: `gradlew build`
-2. Skopiuj plik `build/libs/deathinventorybackup-1.0.0.jar` do folderu `mods` instancji DeceasedCraft
-3. Uruchom serwer lub gre
+All The Mods 10 (NeoForge 1.21.1):
+```
+cd neoforge
+gradlew build
+```
 
 Backupy zapisywane sa w folderze swiata: `deathinventorybackup/<uuid-gracza>/`
-
-## Wymagania
-
-- Minecraft 1.20.1
-- Forge 47.x
-- Java 17 (do budowania)

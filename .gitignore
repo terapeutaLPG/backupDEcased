@@ -7,3 +7,7 @@ out/
 mcmodsrepo/
 .jdk17/
 jdk17.zip
+neoforge/.gradle/
+neoforge/build/
+neoforge/run/
+neoforge/repo/
