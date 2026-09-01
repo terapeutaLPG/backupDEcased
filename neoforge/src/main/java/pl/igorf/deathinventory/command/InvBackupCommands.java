@@ -151,7 +151,8 @@ public final class InvBackupCommands {
                         target.getName().getString(),
                         number,
                         entry.snapshot(),
-                        manager
+                        manager,
+                        player.registryAccess()
                 );
             }
         };
@@ -177,7 +178,9 @@ public final class InvBackupCommands {
         context.getSource().sendSuccess(
                 () -> Component.literal("Przywrocono ekwipunek i XP gracza ")
                         .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
-                        .append(Component.literal(" z backupu #" + number + ".").withStyle(ChatFormatting.GREEN)),
+                        .append(Component.literal(" z backupu #" + number)
+                                .withStyle(ChatFormatting.GREEN))
+                        .append(formatRestoredXp(entry.snapshot())),
                 true
         );
         target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek i poziom doswiadczenia z backupu."));
@@ -211,7 +214,8 @@ public final class InvBackupCommands {
         context.getSource().sendSuccess(
                 () -> Component.literal("Przywrocono ostatni ekwipunek i XP gracza ")
                         .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
-                        .append(Component.literal(".").withStyle(ChatFormatting.GREEN)),
+                        .append(Component.literal(".").withStyle(ChatFormatting.GREEN))
+                        .append(formatRestoredXp(snapshot.get())),
                 true
         );
         target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek i poziom doswiadczenia z backupu."));
@@ -306,6 +310,13 @@ public final class InvBackupCommands {
                 .withColor(color)
                 .withClickEvent(new ClickEvent(action, command))
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+    }
+
+    private static Component formatRestoredXp(net.minecraft.nbt.CompoundTag snapshot) {
+        if (!snapshot.contains("XpLevel")) {
+            return Component.literal(" (brak XP w backupie)").withStyle(ChatFormatting.GRAY);
+        }
+        return Component.literal(" | Lvl " + snapshot.getInt("XpLevel")).withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     private static String formatDimension(String dimension) {

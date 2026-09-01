@@ -9,8 +9,7 @@ import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.player.Inventory;
+import pl.igorf.deathinventory.util.SnapshotItemLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -196,17 +195,7 @@ public class InventoryBackupManager {
     }
 
     public void applySnapshot(ServerPlayer player, CompoundTag snapshot) {
-        Inventory inventory = player.getInventory();
-        inventory.clearContent();
-
-        ListTag items = snapshot.getList("Items", Tag.TAG_COMPOUND);
-        inventory.load(items);
-
-        if (snapshot.contains("SelectedSlot", Tag.TAG_INT)) {
-            inventory.selected = snapshot.getInt("SelectedSlot");
-        }
-
-        syncEquippedItems(player);
+        SnapshotItemLoader.applyToPlayer(snapshot, player);
         applyExperience(player, snapshot);
 
         player.containerMenu.broadcastChanges();
@@ -214,27 +203,23 @@ public class InventoryBackupManager {
     }
 
     private void applyExperience(ServerPlayer player, CompoundTag snapshot) {
-        if (!snapshot.contains("XpLevel", Tag.TAG_INT)) {
+        if (!snapshot.contains("XpLevel")) {
             return;
         }
 
         int level = snapshot.getInt("XpLevel");
-        float progress = snapshot.contains("XpP", Tag.TAG_FLOAT) ? snapshot.getFloat("XpP") : 0.0F;
-        int total = snapshot.contains("XpTotal", Tag.TAG_INT) ? snapshot.getInt("XpTotal") : 0;
+        float progress = snapshot.contains("XpP") ? snapshot.getFloat("XpP") : 0.0F;
+        int total = snapshot.contains("XpTotal") ? snapshot.getInt("XpTotal") : 0;
 
-        player.experienceLevel = level;
+        player.experienceLevel = 0;
+        player.experienceProgress = 0.0F;
+        player.totalExperience = 0;
+        if (level > 0) {
+            player.giveExperienceLevels(level);
+        }
         player.experienceProgress = progress;
         player.totalExperience = total;
         player.connection.send(new ClientboundSetExperiencePacket(progress, total, level));
-    }
-
-    private void syncEquippedItems(ServerPlayer player) {
-        Inventory inventory = player.getInventory();
-        player.setItemSlot(EquipmentSlot.FEET, inventory.armor.get(0).copy());
-        player.setItemSlot(EquipmentSlot.LEGS, inventory.armor.get(1).copy());
-        player.setItemSlot(EquipmentSlot.CHEST, inventory.armor.get(2).copy());
-        player.setItemSlot(EquipmentSlot.HEAD, inventory.armor.get(3).copy());
-        player.setItemSlot(EquipmentSlot.OFFHAND, inventory.offhand.get(0).copy());
     }
 
     private CompoundTag createSnapshot(ServerPlayer player, DamageSource damageSource, long timestamp) {

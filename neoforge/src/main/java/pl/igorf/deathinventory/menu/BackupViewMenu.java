@@ -1,5 +1,6 @@
 package pl.igorf.deathinventory.menu;
 
+import net.minecraft.core.HolderLookup;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,6 +18,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import pl.igorf.deathinventory.InventoryBackupManager;
 import pl.igorf.deathinventory.ModMenus;
+import pl.igorf.deathinventory.util.SnapshotItemLoader;
 
 import java.util.UUID;
 
@@ -30,14 +32,15 @@ public class BackupViewMenu extends AbstractContainerMenu {
     private final int backupNumber;
     private final CompoundTag snapshot;
     private final InventoryBackupManager manager;
+    private final HolderLookup.Provider registryAccess;
 
     public BackupViewMenu(int containerId, Inventory playerInventory) {
-        this(containerId, playerInventory, UUID.randomUUID(), "", "", 0, null, null);
+        this(containerId, playerInventory, UUID.randomUUID(), "", "", 0, null, null, null);
     }
 
     public BackupViewMenu(int containerId, Inventory playerInventory, UUID targetPlayerId, String backupId,
                           String targetPlayerName, int backupNumber, CompoundTag snapshot,
-                          InventoryBackupManager manager) {
+                          InventoryBackupManager manager, HolderLookup.Provider registryAccess) {
         super(ModMenus.BACKUP_VIEW.get(), containerId);
         this.targetPlayerId = targetPlayerId;
         this.backupId = backupId;
@@ -45,6 +48,7 @@ public class BackupViewMenu extends AbstractContainerMenu {
         this.backupNumber = backupNumber;
         this.snapshot = snapshot;
         this.manager = manager;
+        this.registryAccess = registryAccess;
         this.backupContainer = new SimpleContainer(BACKUP_SLOTS);
         loadBackupItems();
 
@@ -61,27 +65,15 @@ public class BackupViewMenu extends AbstractContainerMenu {
         String backupId = buf.readUtf();
         String targetName = buf.readUtf();
         int backupNumber = buf.readInt();
-        return new BackupViewMenu(containerId, playerInventory, targetId, backupId, targetName, backupNumber, null, null);
+        return new BackupViewMenu(containerId, playerInventory, targetId, backupId, targetName, backupNumber, null, null, null);
     }
 
     private void loadBackupItems() {
-        if (snapshot == null) {
+        if (snapshot == null || registryAccess == null) {
             return;
         }
 
-        ListTag items = snapshot.getList("Items", Tag.TAG_COMPOUND);
-        net.minecraft.world.entity.player.Inventory tempInventory = new net.minecraft.world.entity.player.Inventory(null);
-        tempInventory.load(items);
-
-        for (int i = 0; i < 36; i++) {
-            backupContainer.setItem(i, tempInventory.getItem(i).copy());
-        }
-
-        for (int i = 0; i < 4; i++) {
-            backupContainer.setItem(36 + i, tempInventory.armor.get(i).copy());
-        }
-
-        backupContainer.setItem(40, tempInventory.offhand.get(0).copy());
+        SnapshotItemLoader.loadIntoContainer(snapshot, backupContainer, registryAccess);
     }
 
     private void addArmorSlots(int left, int top) {
