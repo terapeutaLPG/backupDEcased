@@ -54,22 +54,80 @@ public class InventoryBackupManager {
             return;
         }
 
-        CompoundTag snapshot = createSnapshot(player, damageSource);
+        long timestamp = Instant.now().toEpochMilli();
+        String backupId = String.valueOf(timestamp);
+        String playerName = player.getName().getString();
+        UUID playerId = player.getUUID();
+        CompoundTag snapshot = createSnapshot(player, damageSource, timestamp);
         Path worldRoot = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
-        Path playerDir = worldRoot.resolve("deathinventorybackup").resolve(player.getUUID().toString());
-        String fileName = Instant.now().toEpochMilli() + ".dat";
+        Path playerDir = worldRoot.resolve("deathinventorybackup").resolve(playerId.toString());
 
         ioExecutor.execute(() -> {
             try {
                 Files.createDirectories(playerDir);
-                Path target = playerDir.resolve(fileName);
+                Path target = playerDir.resolve(backupId + ".dat");
                 NbtIo.writeCompressed(snapshot, target.toFile());
                 pruneOldBackups(playerDir);
-                LOGGER.info("Zapisano ekwipunek gracza {} ({})", player.getName().getString(), fileName);
+                LOGGER.info("Zapisano ekwipunek gracza {} ({})", playerName, backupId);
+                server.execute(() -> notifyBackupSaved(server, playerId, playerName, backupId));
             } catch (IOException exception) {
-                LOGGER.error("Nie udalo sie zapisac ekwipunku gracza {}", player.getName().getString(), exception);
+                LOGGER.error("Nie udalo sie zapisac ekwipunku gracza {}", playerName, exception);
             }
         });
+    }
+
+    private void notifyBackupSaved(MinecraftServer server, UUID playerId, String playerName, String backupId) {
+        int backupNumber = findBackupIndex(server, playerId, backupId);
+        net.minecraft.network.chat.Component message = buildBackupCreatedMessage(playerName, backupNumber, backupId);
+
+        ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+        if (player != null) {
+            player.sendSystemMessage(message);
+        }
+
+        for (ServerPlayer online : server.getPlayerList().getPlayers()) {
+            if (online.hasPermissions(2) && !online.getUUID().equals(playerId)) {
+                online.sendSystemMessage(message);
+            }
+        }
+    }
+
+    private int findBackupIndex(MinecraftServer server, UUID playerId, String backupId) {
+        List<BackupInfo> backups = listBackups(server, playerId);
+        for (int i = 0; i < backups.size(); i++) {
+            if (backups.get(i).id().equals(backupId)) {
+                return i + 1;
+            }
+        }
+        return backups.isEmpty() ? 1 : 1;
+    }
+
+    private net.minecraft.network.chat.Component buildBackupCreatedMessage(String playerName, int backupNumber,
+                                                                             String backupId) {
+        String quotedName = playerName.indexOf(' ') >= 0 ? "\"" + playerName + "\"" : playerName;
+        return net.minecraft.network.chat.Component.literal("[Backup] ")
+                .withStyle(net.minecraft.ChatFormatting.GOLD)
+                .append(net.minecraft.network.chat.Component.literal("Zapisano ekwipunek gracza ")
+                        .withStyle(net.minecraft.ChatFormatting.GRAY))
+                .append(net.minecraft.network.chat.Component.literal(playerName)
+                        .withStyle(net.minecraft.ChatFormatting.YELLOW))
+                .append(net.minecraft.network.chat.Component.literal(" | #").withStyle(net.minecraft.ChatFormatting.GRAY))
+                .append(net.minecraft.network.chat.Component.literal(String.valueOf(backupNumber))
+                        .withStyle(net.minecraft.ChatFormatting.AQUA))
+                .append(net.minecraft.network.chat.Component.literal(" | ID ").withStyle(net.minecraft.ChatFormatting.GRAY))
+                .append(net.minecraft.network.chat.Component.literal(backupId)
+                        .withStyle(net.minecraft.ChatFormatting.DARK_AQUA))
+                .append(net.minecraft.network.chat.Component.literal(" | ")
+                        .withStyle(net.minecraft.ChatFormatting.GRAY))
+                .append(net.minecraft.network.chat.Component.literal("[Lista]")
+                        .withStyle(net.minecraft.network.chat.Style.EMPTY
+                                .withColor(net.minecraft.ChatFormatting.GREEN)
+                                .withClickEvent(new net.minecraft.network.chat.ClickEvent(
+                                        net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND,
+                                        "invbackup list " + quotedName))
+                                .withHoverEvent(new net.minecraft.network.chat.HoverEvent(
+                                        net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+                                        net.minecraft.network.chat.Component.literal("Pokaz backupy tego gracza")))));
     }
 
     public List<BackupInfo> listBackups(MinecraftServer server, UUID playerId) {
@@ -149,11 +207,11 @@ public class InventoryBackupManager {
         player.inventoryMenu.broadcastChanges();
     }
 
-    private CompoundTag createSnapshot(ServerPlayer player, DamageSource damageSource) {
+    private CompoundTag createSnapshot(ServerPlayer player, DamageSource damageSource, long timestamp) {
         CompoundTag tag = new CompoundTag();
         tag.putString("PlayerName", player.getName().getString());
         tag.putUUID("PlayerId", player.getUUID());
-        tag.putLong("Timestamp", Instant.now().toEpochMilli());
+        tag.putLong("Timestamp", timestamp);
         tag.putString("Dimension", player.level().dimension().location().toString());
         tag.putDouble("PosX", player.getX());
         tag.putDouble("PosY", player.getY());

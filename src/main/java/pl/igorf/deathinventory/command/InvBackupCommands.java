@@ -149,6 +149,7 @@ public final class InvBackupCommands {
                         target.getUUID(),
                         entry.info().id(),
                         target.getName().getString(),
+                        number,
                         entry.snapshot(),
                         manager
                 );
@@ -159,6 +160,7 @@ public final class InvBackupCommands {
             buffer.writeUUID(target.getUUID());
             buffer.writeUtf(entry.info().id());
             buffer.writeUtf(target.getName().getString());
+            buffer.writeInt(number);
         });
 
         return 1;

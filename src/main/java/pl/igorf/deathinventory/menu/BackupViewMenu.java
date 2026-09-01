@@ -27,37 +27,41 @@ public class BackupViewMenu extends AbstractContainerMenu {
     private final UUID targetPlayerId;
     private final String backupId;
     private final String targetPlayerName;
+    private final int backupNumber;
     private final CompoundTag snapshot;
     private final InventoryBackupManager manager;
 
     public BackupViewMenu(int containerId, Inventory playerInventory) {
-        this(containerId, playerInventory, UUID.randomUUID(), "", "", null, null);
+        this(containerId, playerInventory, UUID.randomUUID(), "", "", 0, null, null);
     }
 
     public BackupViewMenu(int containerId, Inventory playerInventory, UUID targetPlayerId, String backupId,
-                          String targetPlayerName, CompoundTag snapshot, InventoryBackupManager manager) {
+                          String targetPlayerName, int backupNumber, CompoundTag snapshot,
+                          InventoryBackupManager manager) {
         super(ModMenus.BACKUP_VIEW.get(), containerId);
         this.targetPlayerId = targetPlayerId;
         this.backupId = backupId;
         this.targetPlayerName = targetPlayerName;
+        this.backupNumber = backupNumber;
         this.snapshot = snapshot;
         this.manager = manager;
         this.backupContainer = new SimpleContainer(BACKUP_SLOTS);
         loadBackupItems();
 
-        addArmorSlots(8, 8);
-        addMainInventory(8, 32);
-        addHotbar(8, 88);
+        addArmorSlots(8, 18);
+        addMainInventory(62, 18);
+        addHotbar(62, 74);
 
-        addPlayerInventory(playerInventory, 8, 120);
-        addPlayerHotbar(playerInventory, 8, 178);
+        addPlayerInventory(playerInventory, 8, 126);
+        addPlayerHotbar(playerInventory, 8, 184);
     }
 
     public static BackupViewMenu fromNetwork(int containerId, Inventory playerInventory, FriendlyByteBuf buf) {
         UUID targetId = buf.readUUID();
         String backupId = buf.readUtf();
         String targetName = buf.readUtf();
-        return new BackupViewMenu(containerId, playerInventory, targetId, backupId, targetName, null, null);
+        int backupNumber = buf.readInt();
+        return new BackupViewMenu(containerId, playerInventory, targetId, backupId, targetName, backupNumber, null, null);
     }
 
     private void loadBackupItems() {
@@ -183,7 +187,7 @@ public class BackupViewMenu extends AbstractContainerMenu {
 
         this.manager.applySnapshot(target, snapshot);
         operator.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                "Przywrocono ekwipunek gracza " + targetPlayerName + " z backupu #" + backupId + "."
+                "Przywrocono ekwipunek gracza " + targetPlayerName + " z backupu #" + backupNumber + "."
         ));
         target.sendSystemMessage(net.minecraft.network.chat.Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
         operator.closeContainer();
@@ -200,6 +204,10 @@ public class BackupViewMenu extends AbstractContainerMenu {
 
     public String getBackupId() {
         return backupId;
+    }
+
+    public int getBackupNumber() {
+        return backupNumber;
     }
 
     public UUID getTargetPlayerId() {
