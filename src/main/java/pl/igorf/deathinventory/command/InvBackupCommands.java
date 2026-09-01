@@ -41,23 +41,32 @@ public final class InvBackupCommands {
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, InventoryBackupManager manager) {
-        var playerArg = Commands.argument("gracz", EntityArgument.player());
-        var numberArg = Commands.argument("nr", IntegerArgumentType.integer(1))
-                .suggests(backupIndexSuggestions(manager));
+        SuggestionProvider<CommandSourceStack> indexSuggestions = backupIndexSuggestions(manager);
 
         dispatcher.register(
                 Commands.literal("invbackup")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("list")
-                                .then(playerArg.executes(context -> listBackups(context, manager))))
+                                .then(Commands.argument("gracz", EntityArgument.player())
+                                        .executes(context -> listBackups(context, manager))))
                         .then(Commands.literal("gui")
-                                .then(playerArg.then(numberArg.executes(context -> openGui(context, manager)))))
+                                .then(Commands.argument("gracz", EntityArgument.player())
+                                        .then(Commands.argument("nr", IntegerArgumentType.integer(1))
+                                                .suggests(indexSuggestions)
+                                                .executes(context -> openGui(context, manager)))))
                         .then(Commands.literal("restore")
-                                .then(playerArg.then(numberArg.executes(context -> restoreBackup(context, manager)))))
+                                .then(Commands.argument("gracz", EntityArgument.player())
+                                        .then(Commands.argument("nr", IntegerArgumentType.integer(1))
+                                                .suggests(indexSuggestions)
+                                                .executes(context -> restoreBackup(context, manager)))))
                         .then(Commands.literal("restorelatest")
-                                .then(playerArg.executes(context -> restoreLatest(context, manager))))
+                                .then(Commands.argument("gracz", EntityArgument.player())
+                                        .executes(context -> restoreLatest(context, manager))))
                         .then(Commands.literal("delete")
-                                .then(playerArg.then(numberArg.executes(context -> deleteBackup(context, manager)))))
+                                .then(Commands.argument("gracz", EntityArgument.player())
+                                        .then(Commands.argument("nr", IntegerArgumentType.integer(1))
+                                                .suggests(indexSuggestions)
+                                                .executes(context -> deleteBackup(context, manager)))))
         );
     }
 
@@ -103,29 +112,10 @@ public final class InvBackupCommands {
                 .append(Component.literal(" (" + backups.size() + ")").withStyle(ChatFormatting.GRAY)), false);
 
         for (int i = 0; i < backups.size(); i++) {
-            int number = i + 1;
-            InventoryBackupManager.BackupInfo backup = backups.get(i);
-            MutableComponent line = Component.literal(" #" + number + " ")
-                    .withStyle(ChatFormatting.AQUA)
-                    .append(Component.literal(manager.formatTimestamp(backup.timestamp())).withStyle(ChatFormatting.WHITE))
-                    .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal(formatDimension(backup.dimension())).withStyle(ChatFormatting.GREEN))
-                    .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal(formatDeathCause(backup.deathCause())).withStyle(ChatFormatting.RED))
-                    .append(Component.literal("  ").withStyle(ChatFormatting.RESET))
-                    .append(actionButton("[Podglad]", ChatFormatting.AQUA,
-                            "/invbackup gui " + playerName + " " + number,
-                            "Otworz podglad ekwipunku"))
-                    .append(Component.literal(" ").withStyle(ChatFormatting.RESET))
-                    .append(actionButton("[Przywroc]", ChatFormatting.GREEN,
-                            "/invbackup restore " + playerName + " " + number,
-                            "Przywroc ten ekwipunek"))
-                    .append(Component.literal(" ").withStyle(ChatFormatting.RESET))
-                    .append(actionButton("[Usun]", ChatFormatting.RED,
-                            "/invbackup delete " + playerName + " " + number,
-                            "Usun ten backup"));
-
-            context.getSource().sendSuccess(() -> line, false);
+            final int number = i + 1;
+            final InventoryBackupManager.BackupInfo backup = backups.get(i);
+            context.getSource().sendSuccess(() -> buildBackupInfoLine(number, backup, manager), false);
+            context.getSource().sendSuccess(() -> buildBackupActionLine(number, playerName), false);
         }
 
         context.getSource().sendSuccess(() -> Component.literal(
@@ -270,10 +260,45 @@ public final class InvBackupCommands {
         return entry.get();
     }
 
-    private static MutableComponent actionButton(String label, ChatFormatting color, String command, String hover) {
+    private static Component buildBackupInfoLine(int number, InventoryBackupManager.BackupInfo backup,
+                                                 InventoryBackupManager manager) {
+        return Component.empty()
+                .append(Component.literal("#" + number + " ").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(manager.formatTimestamp(backup.timestamp())).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal(formatDimension(backup.dimension())).withStyle(ChatFormatting.GREEN))
+                .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal(formatDeathCause(backup.deathCause())).withStyle(ChatFormatting.RED));
+    }
+
+    private static Component buildBackupActionLine(int number, String playerName) {
+        String quotedName = quotePlayerName(playerName);
+        return Component.empty()
+                .append(actionButton("[Podglad]", ChatFormatting.AQUA,
+                        "invbackup gui " + quotedName + " " + number,
+                        "Otworz podglad ekwipunku", ClickEvent.Action.RUN_COMMAND))
+                .append(Component.literal("  ").withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
+                .append(actionButton("[Przywroc]", ChatFormatting.GREEN,
+                        "invbackup restore " + quotedName + " " + number,
+                        "Przywroc ten ekwipunek", ClickEvent.Action.RUN_COMMAND))
+                .append(Component.literal("  ").withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
+                .append(actionButton("[Usun]", ChatFormatting.RED,
+                        "invbackup delete " + quotedName + " " + number,
+                        "Usun ten backup", ClickEvent.Action.SUGGEST_COMMAND));
+    }
+
+    private static String quotePlayerName(String playerName) {
+        if (playerName.indexOf(' ') >= 0) {
+            return "\"" + playerName.replace("\"", "\\\"") + "\"";
+        }
+        return playerName;
+    }
+
+    private static MutableComponent actionButton(String label, ChatFormatting color, String command, String hover,
+                                                 ClickEvent.Action action) {
         return Component.literal(label).withStyle(Style.EMPTY
                 .withColor(color)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                .withClickEvent(new ClickEvent(action, command))
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
     }
 
