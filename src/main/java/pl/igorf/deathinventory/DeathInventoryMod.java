@@ -17,6 +17,7 @@ public class DeathInventoryMod {
 
     public DeathInventoryMod() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+        ModMenus.MENUS.register(modBus);
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(new DeathEventHandler(backupManager));
     }

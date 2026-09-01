@@ -13,10 +13,14 @@ Mod Forge dla Minecraft 1.20.1 (DeceasedCraft 5.10.16).
 
 ```
 /invbackup list <gracz>
-/invbackup restore <gracz> <id>
+/invbackup gui <gracz> <nr>
+/invbackup restore <gracz> <nr>
 /invbackup restorelatest <gracz>
-/invbackup delete <gracz> <id>
+/invbackup delete <gracz> <nr>
 ```
+
+Numer backupu (#1, #2...) podpowiada sie przez TAB. Na liscie sa klikalne przyciski [Podglad], [Przywroc], [Usun].
+GUI pokazuje ekwipunek z backupu tylko do podgladu - nie mozna wyciagac itemow. Przywracanie przez przycisk w GUI.
 
 ## Instalacja
 

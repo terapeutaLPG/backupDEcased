@@ -1,16 +1,27 @@
 package pl.igorf.deathinventory.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.network.NetworkHooks;
 import pl.igorf.deathinventory.InventoryBackupManager;
+import pl.igorf.deathinventory.menu.BackupViewMenu;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,30 +31,57 @@ public final class InvBackupCommands {
             Component.literal("Brak zapisanych ekwipunkow dla tego gracza.")
     );
     private static final SimpleCommandExceptionType BACKUP_NOT_FOUND = new SimpleCommandExceptionType(
-            Component.literal("Nie znaleziono backupu o podanym ID.")
+            Component.literal("Nie znaleziono backupu o podanym numerze.")
     );
+    private static final SimpleCommandExceptionType PLAYER_ONLY = new SimpleCommandExceptionType(
+            Component.literal("Ta komenda wymaga gracza (nie dziala z konsoli).")
+    );
+
     private InvBackupCommands() {
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, InventoryBackupManager manager) {
+        var playerArg = Commands.argument("gracz", EntityArgument.player());
+        var numberArg = Commands.argument("nr", IntegerArgumentType.integer(1))
+                .suggests(backupIndexSuggestions(manager));
+
         dispatcher.register(
                 Commands.literal("invbackup")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("list")
-                                .then(Commands.argument("gracz", EntityArgument.player())
-                                        .executes(context -> listBackups(context, manager))))
+                                .then(playerArg.executes(context -> listBackups(context, manager))))
+                        .then(Commands.literal("gui")
+                                .then(playerArg.then(numberArg.executes(context -> openGui(context, manager)))))
                         .then(Commands.literal("restore")
-                                .then(Commands.argument("gracz", EntityArgument.player())
-                                        .then(Commands.argument("id", StringArgumentType.string())
-                                                .executes(context -> restoreBackup(context, manager, false)))))
+                                .then(playerArg.then(numberArg.executes(context -> restoreBackup(context, manager)))))
                         .then(Commands.literal("restorelatest")
-                                .then(Commands.argument("gracz", EntityArgument.player())
-                                        .executes(context -> restoreBackup(context, manager, true))))
+                                .then(playerArg.executes(context -> restoreLatest(context, manager))))
                         .then(Commands.literal("delete")
-                                .then(Commands.argument("gracz", EntityArgument.player())
-                                        .then(Commands.argument("id", StringArgumentType.string())
-                                                .executes(context -> deleteBackup(context, manager)))))
+                                .then(playerArg.then(numberArg.executes(context -> deleteBackup(context, manager)))))
         );
+    }
+
+    private static SuggestionProvider<CommandSourceStack> backupIndexSuggestions(InventoryBackupManager manager) {
+        return (context, builder) -> {
+            try {
+                ServerPlayer target = EntityArgument.getPlayer(context, "gracz");
+                List<InventoryBackupManager.BackupInfo> backups = manager.listBackups(
+                        context.getSource().getServer(),
+                        target.getUUID()
+                );
+                for (int i = 0; i < backups.size(); i++) {
+                    InventoryBackupManager.BackupInfo info = backups.get(i);
+                    int number = i + 1;
+                    builder.suggest(number, Component.literal(
+                            "#" + number + " | " + manager.formatTimestamp(info.timestamp())
+                                    + " | " + formatDimension(info.dimension())
+                                    + " | " + formatDeathCause(info.deathCause())
+                    ));
+                }
+            } catch (CommandSyntaxException ignored) {
+            }
+            return builder.buildFuture();
+        };
     }
 
     private static int listBackups(CommandContext<CommandSourceStack> context, InventoryBackupManager manager)
@@ -58,43 +96,118 @@ public final class InvBackupCommands {
             throw NO_BACKUPS.create();
         }
 
-        context.getSource().sendSuccess(() -> Component.literal(
-                "Backupy gracza " + target.getName().getString() + " (" + backups.size() + "):"
-        ), false);
+        String playerName = target.getName().getString();
+        context.getSource().sendSuccess(() -> Component.literal("Backupy gracza ")
+                .withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(playerName).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(" (" + backups.size() + ")").withStyle(ChatFormatting.GRAY)), false);
 
-        int index = 1;
-        for (InventoryBackupManager.BackupInfo backup : backups) {
-            final int lineNumber = index++;
-            final String line = lineNumber + ". ID: " + backup.id()
-                    + " | " + manager.formatTimestamp(backup.timestamp())
-                    + " | " + backup.dimension()
-                    + " | smierc: " + backup.deathCause();
-            context.getSource().sendSuccess(() -> Component.literal(line), false);
+        for (int i = 0; i < backups.size(); i++) {
+            int number = i + 1;
+            InventoryBackupManager.BackupInfo backup = backups.get(i);
+            MutableComponent line = Component.literal(" #" + number + " ")
+                    .withStyle(ChatFormatting.AQUA)
+                    .append(Component.literal(manager.formatTimestamp(backup.timestamp())).withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(formatDimension(backup.dimension())).withStyle(ChatFormatting.GREEN))
+                    .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(formatDeathCause(backup.deathCause())).withStyle(ChatFormatting.RED))
+                    .append(Component.literal("  ").withStyle(ChatFormatting.RESET))
+                    .append(actionButton("[Podglad]", ChatFormatting.AQUA,
+                            "/invbackup gui " + playerName + " " + number,
+                            "Otworz podglad ekwipunku"))
+                    .append(Component.literal(" ").withStyle(ChatFormatting.RESET))
+                    .append(actionButton("[Przywroc]", ChatFormatting.GREEN,
+                            "/invbackup restore " + playerName + " " + number,
+                            "Przywroc ten ekwipunek"))
+                    .append(Component.literal(" ").withStyle(ChatFormatting.RESET))
+                    .append(actionButton("[Usun]", ChatFormatting.RED,
+                            "/invbackup delete " + playerName + " " + number,
+                            "Usun ten backup"));
+
+            context.getSource().sendSuccess(() -> line, false);
         }
+
+        context.getSource().sendSuccess(() -> Component.literal(
+                "Wskazowka: uzyc /invbackup gui <gracz> <nr> lub kliknij [Podglad]. Numer podpowiada sie przez TAB."
+        ).withStyle(ChatFormatting.DARK_GRAY), false);
 
         return backups.size();
     }
 
-    private static int restoreBackup(CommandContext<CommandSourceStack> context, InventoryBackupManager manager,
-                                     boolean latest) throws CommandSyntaxException {
+    private static int openGui(CommandContext<CommandSourceStack> context, InventoryBackupManager manager)
+            throws CommandSyntaxException {
+        if (!(context.getSource().getEntity() instanceof ServerPlayer operator)) {
+            throw PLAYER_ONLY.create();
+        }
+
         ServerPlayer target = EntityArgument.getPlayer(context, "gracz");
+        int number = IntegerArgumentType.getInteger(context, "nr");
+        InventoryBackupManager.BackupEntry entry = resolveBackup(context, manager, target, number);
 
-        Optional<InventoryBackupManager.BackupInfo> latestInfo = latest
-                ? manager.getLatestBackup(context.getSource().getServer(), target.getUUID())
-                : Optional.empty();
+        MenuProvider provider = new MenuProvider() {
+            @Override
+            public Component getDisplayName() {
+                return Component.literal("Backup #" + number + " - " + target.getName().getString());
+            }
 
-        String backupId = latest
-                ? latestInfo.map(InventoryBackupManager.BackupInfo::id).orElse(null)
-                : StringArgumentType.getString(context, "id");
+            @Override
+            public BackupViewMenu createMenu(int containerId, Inventory inventory, Player player) {
+                return new BackupViewMenu(
+                        containerId,
+                        inventory,
+                        target.getUUID(),
+                        entry.info().id(),
+                        target.getName().getString(),
+                        entry.snapshot(),
+                        manager
+                );
+            }
+        };
 
-        if (backupId == null) {
+        NetworkHooks.openScreen(operator, provider, buffer -> {
+            buffer.writeUUID(target.getUUID());
+            buffer.writeUtf(entry.info().id());
+            buffer.writeUtf(target.getName().getString());
+        });
+
+        return 1;
+    }
+
+    private static int restoreBackup(CommandContext<CommandSourceStack> context, InventoryBackupManager manager)
+            throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(context, "gracz");
+        int number = IntegerArgumentType.getInteger(context, "nr");
+        InventoryBackupManager.BackupEntry entry = resolveBackup(context, manager, target, number);
+
+        manager.applySnapshot(target, entry.snapshot());
+
+        context.getSource().sendSuccess(
+                () -> Component.literal("Przywrocono ekwipunek gracza ")
+                        .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(" z backupu #" + number + ".").withStyle(ChatFormatting.GREEN)),
+                true
+        );
+        target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
+        return 1;
+    }
+
+    private static int restoreLatest(CommandContext<CommandSourceStack> context, InventoryBackupManager manager)
+            throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(context, "gracz");
+        Optional<InventoryBackupManager.BackupInfo> latest = manager.getLatestBackup(
+                context.getSource().getServer(),
+                target.getUUID()
+        );
+
+        if (latest.isEmpty()) {
             throw NO_BACKUPS.create();
         }
 
         Optional<net.minecraft.nbt.CompoundTag> snapshot = manager.loadBackup(
                 context.getSource().getServer(),
                 target.getUUID(),
-                backupId
+                latest.get().id()
         );
 
         if (snapshot.isEmpty()) {
@@ -103,9 +216,10 @@ public final class InvBackupCommands {
 
         manager.applySnapshot(target, snapshot.get());
 
-        String playerName = target.getName().getString();
         context.getSource().sendSuccess(
-                () -> Component.literal("Przywrocono ekwipunek gracza " + playerName + " z backupu " + backupId + "."),
+                () -> Component.literal("Przywrocono ostatni ekwipunek gracza ")
+                        .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(".").withStyle(ChatFormatting.GREEN)),
                 true
         );
         target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
@@ -115,12 +229,13 @@ public final class InvBackupCommands {
     private static int deleteBackup(CommandContext<CommandSourceStack> context, InventoryBackupManager manager)
             throws CommandSyntaxException {
         ServerPlayer target = EntityArgument.getPlayer(context, "gracz");
-        String backupId = StringArgumentType.getString(context, "id");
+        int number = IntegerArgumentType.getInteger(context, "nr");
+        InventoryBackupManager.BackupEntry entry = resolveBackup(context, manager, target, number);
 
         boolean deleted = manager.deleteBackup(
                 context.getSource().getServer(),
                 target.getUUID(),
-                backupId
+                entry.info().id()
         );
 
         if (!deleted) {
@@ -128,9 +243,78 @@ public final class InvBackupCommands {
         }
 
         context.getSource().sendSuccess(
-                () -> Component.literal("Usunieto backup " + backupId + " gracza " + target.getName().getString() + "."),
+                () -> Component.literal("Usunieto backup #" + number + " gracza ")
+                        .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(".").withStyle(ChatFormatting.RED)),
                 true
         );
         return 1;
+    }
+
+    private static InventoryBackupManager.BackupEntry resolveBackup(
+            CommandContext<CommandSourceStack> context,
+            InventoryBackupManager manager,
+            ServerPlayer target,
+            int number
+    ) throws CommandSyntaxException {
+        Optional<InventoryBackupManager.BackupEntry> entry = manager.getBackupByIndex(
+                context.getSource().getServer(),
+                target.getUUID(),
+                number
+        );
+
+        if (entry.isEmpty()) {
+            throw BACKUP_NOT_FOUND.create();
+        }
+
+        return entry.get();
+    }
+
+    private static MutableComponent actionButton(String label, ChatFormatting color, String command, String hover) {
+        return Component.literal(label).withStyle(Style.EMPTY
+                .withColor(color)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+    }
+
+    private static String formatDimension(String dimension) {
+        if (dimension.endsWith(":overworld")) {
+            return "Overworld";
+        }
+        if (dimension.endsWith(":the_nether")) {
+            return "Nether";
+        }
+        if (dimension.endsWith(":the_end")) {
+            return "End";
+        }
+        int separator = dimension.indexOf(':');
+        return separator >= 0 ? dimension.substring(separator + 1) : dimension;
+    }
+
+    private static String formatDeathCause(String cause) {
+        return switch (cause) {
+            case "genericKill" -> "smierc";
+            case "player" -> "gracz";
+            case "mob" -> "mob";
+            case "fall" -> "upadek";
+            case "explosion", "explosion.player" -> "wybuch";
+            case "fireball" -> "kula ognia";
+            case "lava" -> "lawa";
+            case "drown" -> "utonięcie";
+            case "starve" -> "glod";
+            case "wither" -> "wither";
+            case "magic" -> "magia";
+            case "indirectMagic" -> "magia (posrednia)";
+            case "thorns" -> "kolce";
+            case "arrow" -> "strzala";
+            case "trident" -> "trojzab";
+            case "lightningBolt" -> "piorun";
+            case "cramming" -> "zgniecenie";
+            case "flyIntoWall" -> "kontuzja";
+            case "anvil" -> "kowadlo";
+            case "fallingBlock" -> "spadajacy blok";
+            case "fireworks" -> "fajerwerki";
+            default -> cause;
+        };
     }
 }

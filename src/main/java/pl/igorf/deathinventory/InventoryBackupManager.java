@@ -114,6 +114,16 @@ public class InventoryBackupManager {
         return Optional.of(backups.get(0));
     }
 
+    public Optional<BackupEntry> getBackupByIndex(MinecraftServer server, UUID playerId, int index) {
+        List<BackupInfo> backups = listBackups(server, playerId);
+        if (index < 1 || index > backups.size()) {
+            return Optional.empty();
+        }
+
+        BackupInfo info = backups.get(index - 1);
+        return loadBackup(server, playerId, info.id()).map(snapshot -> new BackupEntry(info, snapshot));
+    }
+
     public boolean deleteBackup(MinecraftServer server, UUID playerId, String backupId) {
         Path path = getPlayerDir(server, playerId).resolve(backupId + ".dat");
         try {
@@ -218,5 +228,8 @@ public class InventoryBackupManager {
     }
 
     public record BackupInfo(String id, long timestamp, String deathCause, String dimension) {
+    }
+
+    public record BackupEntry(BackupInfo info, CompoundTag snapshot) {
     }
 }
