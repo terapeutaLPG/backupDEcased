@@ -83,6 +83,7 @@ public final class InvBackupCommands {
                     int number = i + 1;
                     builder.suggest(number, Component.literal(
                             "#" + number + " | " + manager.formatTimestamp(info.timestamp())
+                                    + (info.xpLevel() >= 0 ? " | Lvl " + info.xpLevel() : "")
                                     + " | " + formatDimension(info.dimension())
                                     + " | " + formatDeathCause(info.deathCause())
                     ));
@@ -175,12 +176,12 @@ public final class InvBackupCommands {
         manager.applySnapshot(target, entry.snapshot());
 
         context.getSource().sendSuccess(
-                () -> Component.literal("Przywrocono ekwipunek gracza ")
+                () -> Component.literal("Przywrocono ekwipunek i XP gracza ")
                         .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
                         .append(Component.literal(" z backupu #" + number + ".").withStyle(ChatFormatting.GREEN)),
                 true
         );
-        target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
+        target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek i poziom doswiadczenia z backupu."));
         return 1;
     }
 
@@ -209,12 +210,12 @@ public final class InvBackupCommands {
         manager.applySnapshot(target, snapshot.get());
 
         context.getSource().sendSuccess(
-                () -> Component.literal("Przywrocono ostatni ekwipunek gracza ")
+                () -> Component.literal("Przywrocono ostatni ekwipunek i XP gracza ")
                         .append(Component.literal(target.getName().getString()).withStyle(ChatFormatting.YELLOW))
                         .append(Component.literal(".").withStyle(ChatFormatting.GREEN)),
                 true
         );
-        target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
+        target.sendSystemMessage(Component.literal("Operator przywrocil Twoj ekwipunek i poziom doswiadczenia z backupu."));
         return 1;
     }
 
@@ -264,10 +265,14 @@ public final class InvBackupCommands {
 
     private static Component buildBackupInfoLine(int number, InventoryBackupManager.BackupInfo backup,
                                                  InventoryBackupManager manager) {
-        return Component.empty()
+        MutableComponent line = Component.empty()
                 .append(Component.literal("#" + number + " ").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(manager.formatTimestamp(backup.timestamp())).withStyle(ChatFormatting.WHITE))
-                .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal(manager.formatTimestamp(backup.timestamp())).withStyle(ChatFormatting.WHITE));
+        if (backup.xpLevel() >= 0) {
+            line = line.append(Component.literal(" | Lvl ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(backup.xpLevel())).withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
+        return line.append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal(formatDimension(backup.dimension())).withStyle(ChatFormatting.GREEN))
                 .append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal(formatDeathCause(backup.deathCause())).withStyle(ChatFormatting.RED));

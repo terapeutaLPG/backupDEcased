@@ -189,7 +189,7 @@ public class BackupViewMenu extends AbstractContainerMenu {
         operator.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                 "Przywrocono ekwipunek gracza " + targetPlayerName + " z backupu #" + backupNumber + "."
         ));
-        target.sendSystemMessage(net.minecraft.network.chat.Component.literal("Operator przywrocil Twoj ekwipunek z backupu."));
+        target.sendSystemMessage(net.minecraft.network.chat.Component.literal("Operator przywrocil Twoj ekwipunek i poziom doswiadczenia z backupu."));
         operator.closeContainer();
     }
 

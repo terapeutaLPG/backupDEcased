@@ -6,9 +6,9 @@ license="MIT"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-authors="igorf"
+authors="jaruso99"
 description='''
-Zapisuje ekwipunek gracza przy smierci i pozwala operatorom go przywrocic.
+Zapisuje ekwipunek i poziom doswiadczenia gracza przy smierci. Operatorzy moga przywrocic zapisany stan.
 '''
 
 [[dependencies.${mod_id}]]

@@ -4,6 +4,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -108,7 +109,7 @@ public class InventoryBackupManager {
         String quotedName = playerName.indexOf(' ') >= 0 ? "\"" + playerName + "\"" : playerName;
         return net.minecraft.network.chat.Component.literal("[Backup] ")
                 .withStyle(net.minecraft.ChatFormatting.GOLD)
-                .append(net.minecraft.network.chat.Component.literal("Zapisano ekwipunek gracza ")
+                .append(net.minecraft.network.chat.Component.literal("Zapisano ekwipunek i XP gracza ")
                         .withStyle(net.minecraft.ChatFormatting.GRAY))
                 .append(net.minecraft.network.chat.Component.literal(playerName)
                         .withStyle(net.minecraft.ChatFormatting.YELLOW))
@@ -205,9 +206,25 @@ public class InventoryBackupManager {
         }
 
         syncEquippedItems(player);
+        applyExperience(player, snapshot);
 
         player.containerMenu.broadcastChanges();
         player.inventoryMenu.broadcastChanges();
+    }
+
+    private void applyExperience(ServerPlayer player, CompoundTag snapshot) {
+        if (!snapshot.contains("XpLevel", Tag.TAG_INT)) {
+            return;
+        }
+
+        int level = snapshot.getInt("XpLevel");
+        float progress = snapshot.contains("XpP", Tag.TAG_FLOAT) ? snapshot.getFloat("XpP") : 0.0F;
+        int total = snapshot.contains("XpTotal", Tag.TAG_INT) ? snapshot.getInt("XpTotal") : 0;
+
+        player.experienceLevel = level;
+        player.experienceProgress = progress;
+        player.totalExperience = total;
+        player.connection.send(new ClientboundSetExperiencePacket(progress, total, level));
     }
 
     private void syncEquippedItems(ServerPlayer player) {
@@ -234,6 +251,9 @@ public class InventoryBackupManager {
         player.getInventory().save(items);
         tag.put("Items", items);
         tag.putInt("SelectedSlot", player.getInventory().selected);
+        tag.putInt("XpLevel", player.experienceLevel);
+        tag.putFloat("XpP", player.experienceProgress);
+        tag.putInt("XpTotal", player.totalExperience);
         return tag;
     }
 
@@ -248,6 +268,7 @@ public class InventoryBackupManager {
         long timestamp = parseTimestamp(backupId);
         String deathCause = "unknown";
         String dimension = "?";
+        int xpLevel = -1;
 
         try {
             CompoundTag tag = NbtIo.readCompressed(path.toFile());
@@ -260,10 +281,13 @@ public class InventoryBackupManager {
             if (tag.contains("Dimension", Tag.TAG_STRING)) {
                 dimension = tag.getString("Dimension");
             }
+            if (tag.contains("XpLevel", Tag.TAG_INT)) {
+                xpLevel = tag.getInt("XpLevel");
+            }
         } catch (IOException ignored) {
         }
 
-        return new BackupInfo(backupId, timestamp, deathCause, dimension);
+        return new BackupInfo(backupId, timestamp, deathCause, dimension, xpLevel);
     }
 
     private long parseTimestamp(String backupId) {
@@ -297,7 +321,7 @@ public class InventoryBackupManager {
         return DISPLAY_FORMAT.format(Instant.ofEpochMilli(timestamp));
     }
 
-    public record BackupInfo(String id, long timestamp, String deathCause, String dimension) {
+    public record BackupInfo(String id, long timestamp, String deathCause, String dimension, int xpLevel) {
     }
 
     public record BackupEntry(BackupInfo info, CompoundTag snapshot) {
